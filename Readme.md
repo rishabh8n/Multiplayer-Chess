@@ -2,13 +2,19 @@
 
 This is a multiplayer chess application that allows users to play chess against each other online. The game features a client-server architecture with a GUI chess board, user authentication, and real-time gameplay.
 
-### Features
+## Team Members
+
+- Harsh Yadav
+- Rishabh Raj
+- Pradeep Kumar
+
+## Features
 
 - Multiplayer chess over network
 - User authentication and account management
 - Real time chess board updates
 
-### Project Setup
+## Project Setup
 
 Prerequisites
 
@@ -16,7 +22,7 @@ Prerequisites
 - MySQL Database
 - IDE (IntelliJ IDEA recommended)
 
-#### Step 1: Clone the repository
+### Step 1: Clone the repository
 
 Clone the repository to your local machine:
 
@@ -25,7 +31,7 @@ git clone https://github.com/rishabh8n/Multiplayer-Chess.git
 cd chess-game
 ```
 
-#### Step 2: Set up MySQL Database
+### Step 2: Set up MySQL Database
 
 ```
 CREATE DATABASE IF NOT EXISTS chess_db;
@@ -41,14 +47,14 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ```
 
-#### Step 3: Add MySQL Connector to Project
+### Step 3: Add MySQL Connector to Project
 
 1. Download MySQL Connector/J from MySQL Downloads
 2. Extract the downloaded archive
 3. Add the JAR file to your project:
    - In IntelliJ IDEA: File > Project Structure > Libraries > + > Java > Select the JAR file
 
-#### Step 4: Configuring Database Connection
+### Step 4: Configuring Database Connection
 
 1. Go to src/utils/DatabaseConnection.java
 2. Update the values of URL, USER and PASSWORD variables
@@ -59,22 +65,47 @@ private static String USER = "your username";
 private static String PASSWORD = "your password";
 ```
 
-#### Step 5: Compile and run the project
+### Step 5: Compile and run the project
 
-1. Compile the project
+#### 1. Compile the project by running the build script.
 
-```bash
-javac -cp ".:mysql-connector-java-8.0.33.jar" -d bin src/**/*.java
+###### Windows
+
+```shell
+.\buid.ps1
 ```
 
-2. Run the server
+###### Linux
 
 ```bash
-java -cp "bin:mysql-connector-java-8.0.33.jar" server.ChessServer
+chmod +x build.sh
+./build.sh
 ```
 
-3. Run the client
+#### 2. Run the server
+
+###### Windows
 
 ```bash
-java -cp "bin:mysql-connector-java-8.0.33.jar" client.ChessClientV2
+java -cp "bin;lib\mysql-connector-java-8.0.28.jar" server.Server
+```
+
+###### Linux
+
+```bash
+java -cp "bin:lib/mysql-connector-java-8.0.28.jar" server.Server
+```
+
+#### 3. Run the client
+
+###### Windows
+
+```bash
+java -cp "bin;lib\mysql-connector-java-8.0.28.jar" client.ChessClientV2
+```
+
+###### Linux
+
+```bash
+java -cp "bin:lib/mysql-connector-java-8.0.28.jar" client.ChessClientV2
 ```
