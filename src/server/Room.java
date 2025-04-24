@@ -124,10 +124,19 @@ public class Room {
                 String winner = !whiteToMove ? "White" : "Black";
                 whitePlayer.sendMessage("RESPONSE: Checkmate! " + winner + " wins!");
                 blackPlayer.sendMessage("RESPONSE: Checkmate! " + winner + " wins!");
+                if(winner.equals("White")) {
+                    whitePlayer.updateGameStats(true);
+                    blackPlayer.updateGameStats(false);
+                } else {
+                    blackPlayer.updateGameStats(true);
+                    whitePlayer.updateGameStats(false);
+                }
                 isGameOver = true;
             } else if (board.isStalemate()) {
                 whitePlayer.sendMessage("RESPONSE: Stalemate! Game is a draw.");
                 blackPlayer.sendMessage("RESPONSE: Stalemate! Game is a draw.");
+                whitePlayer.updateGameStats(false);
+                blackPlayer.updateGameStats(false);
                 isGameOver = true;
             }
 
@@ -136,6 +145,10 @@ public class Room {
             client.sendMessage("RESPONSE: Invalid move format");
             return false;
         }
+    }
+
+    public boolean isFull() {
+        return currentPlayers >= 2;
     }
 
     public String getBoardState() {

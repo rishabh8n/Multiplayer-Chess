@@ -9,6 +9,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.sql.SQLOutput;
+import java.util.List;
+import java.util.ArrayList;
 
 public class ChessClientV2 extends JFrame {
 
@@ -21,6 +23,8 @@ public class ChessClientV2 extends JFrame {
     private int roomId = -1;
     private boolean isAuthenticated = true;
     private String username;
+    private boolean isInMatchmaking = false;
+    private List<String> rooms = new ArrayList<>();
 
     //GUI components
     private JPanel mainPanel;
@@ -31,6 +35,9 @@ public class ChessClientV2 extends JFrame {
     private JTextArea messagesArea;
     private JTextField commandField;
     private JButton sendButton;
+    private JPanel roomListPanel;
+    private JPanel userInfoPanel;
+    private GridBagConstraints gbc;
 
 
     public ChessClientV2(String host, int port) {
@@ -145,6 +152,11 @@ public class ChessClientV2 extends JFrame {
 
         JPanel roomControlsPanel = new JPanel(new FlowLayout());
 
+        JPanel playPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JButton playButton = new JButton(!isInMatchmaking ? "Play" : "Cancel");
+        playPanel.add(playButton);
+
+
         JPanel createPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         JTextField createRoomField = new JTextField(10);
         JCheckBox privateRoomCheckBox = new JCheckBox("Private Room");
@@ -161,14 +173,50 @@ public class ChessClientV2 extends JFrame {
         joinPanel.add(joinRoomField);
         joinPanel.add(joinButton);
 
+        userInfoPanel = new JPanel(new GridBagLayout());
+        gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        userInfoPanel.setPreferredSize(new Dimension(200, 50));
+        sendCommand("GETUSERINFO:" + username);
+
+        sendCommand("GETROOMS:ALL");
+        roomListPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        roomListPanel.setPreferredSize(new Dimension(200, 200));
+        roomListPanel.setBorder(BorderFactory.createTitledBorder("Available Rooms"));
+
+        JPanel westPanel = new JPanel();
+        westPanel.setPreferredSize(new Dimension(200, 0));
+
+        roomControlsPanel.add(playPanel);
         roomControlsPanel.add(createPanel);
         roomControlsPanel.add(joinPanel);
+
 
         if(isAuthenticated) {
             label.setText("Welcome " + username + " to the Lobby");
             panel.add(label, BorderLayout.NORTH);
-            panel.add(roomControlsPanel, BorderLayout.CENTER);
+            panel.add(roomListPanel, BorderLayout.EAST);
+            panel.add(userInfoPanel,BorderLayout.CENTER);
+            panel.add(roomControlsPanel, BorderLayout.SOUTH);
+            panel.add(westPanel, BorderLayout.WEST);
+
+            playButton.addActionListener(e -> {
+                if (!isInMatchmaking) {
+                    sendCommand("MATCHMAKING:JOIN");
+                    playButton.setText("Cancel");
+                    isInMatchmaking = true;
+                } else {
+                    sendCommand("MATCHMAKING:LEAVE");
+                    playButton.setText("Play");
+                    isInMatchmaking = false;
+                }
+            });
+
             createButton.addActionListener(e -> {
+                if (isInMatchmaking) {
+                    showMessage("You are already in matchmaking, please cancel it first.");
+                    return;
+                }
                 String roomName = createRoomField.getText();
                 boolean privateRoom = privateRoomCheckBox.isSelected();
                 if (!roomName.isEmpty()) {
@@ -178,6 +226,10 @@ public class ChessClientV2 extends JFrame {
                 }
             });
             joinButton.addActionListener(e -> {
+                if (isInMatchmaking) {
+                    showMessage("You are already in matchmaking, please cancel it first.");
+                    return;
+                }
                 String roomIdStr = joinRoomField.getText();
                 if (!roomIdStr.isEmpty()) {
                     try {
@@ -253,6 +305,13 @@ public class ChessClientV2 extends JFrame {
 
     private void switchToPanel(String panelName) {
         CardLayout cl = (CardLayout) (mainPanel.getLayout());
+        if (panelName.equals("lobby")) {
+            if (lobbyPanel != null) {
+                mainPanel.remove(lobbyPanel);
+            }
+            this.lobbyPanel = createLobbyPanel();
+            mainPanel.add(lobbyPanel, panelName);
+        }
         cl.show(mainPanel, panelName);
     }
 
@@ -311,10 +370,31 @@ public class ChessClientV2 extends JFrame {
                             }else if(parts[2].equals("SUCCESS")) {
                                 showMessage("Register Success");
                             }
-                        } else if(finalResponse.startsWith("RESPONSE:JOIN")){
+                        }else if(finalResponse.startsWith("RESPONSE:GETUSERINFO:SUCCESS")){
+                            String[] parts = finalResponse.split(":");
+                            if(parts.length >= 5) {
+                                userInfoPanel.removeAll();
+                                gbc.gridx=0;
+                                gbc.gridy=0;
+                                JLabel label = new JLabel("Username: "+parts[3]);
+                                label.setFont(new Font("Arial", Font.BOLD, 24));
+                                userInfoPanel.add(label, gbc);
+                                gbc.gridy=1;
+                                label = new JLabel("Total Games Played: "+parts[4]);
+                                label.setFont(new Font("Arial", Font.BOLD, 24));
+                                userInfoPanel.add(label, gbc);
+                                gbc.gridy=2;
+                                label = new JLabel("Games Won: "+parts[5]);
+                                label.setFont(new Font("Arial", Font.BOLD, 24));
+                                userInfoPanel.add(label, gbc);
+                                userInfoPanel.revalidate();
+                                userInfoPanel.repaint();
+                            }
+                        }
+                        else if(finalResponse.startsWith("RESPONSE:JOIN")){
                             String[] parts = finalResponse.split(":");
                             if(parts[2].equals("FAILED")){
-                                showMessage("Failed to join the room.");
+                                showMessage(parts.length>=4?parts[3]:"Failed to join the room.");
                             }else if(parts[2].equals("SUCCESS")) {
                                 roomId = Integer.parseInt(parts[4]);
                                 showMessage("Joined Room: " + roomId+"\nRoom Name: "+parts[3]);
@@ -338,23 +418,68 @@ public class ChessClientV2 extends JFrame {
                             }else {
                                 showMessage("Failed to leave the room.");
                             }
-                        } else if(finalResponse.startsWith("RESPONSE:EXIT")){
+                        } else if(finalResponse.startsWith("MATCHED:")){
+                            int roomId = Integer.parseInt(finalResponse.split(":")[1]);
+                            showMessage("Matched! Room ID: " + roomId);
+                            this.roomId = roomId;
+                            this.isInMatchmaking = false;
+                            switchToPanel("game");
+                        } else if (finalResponse.startsWith("MATCHMAKING:WAITING")) {
+                            showMessage("Waiting for a match...");
+                        } else if (finalResponse.startsWith("MATCHMAKING:LEFT")) {
+                            showMessage("Left matchmaking queue.");
+                            this.isInMatchmaking = false;
+                        }
+                        else if(finalResponse.startsWith("NEWROOM:")){
+                            String[] parts = finalResponse.split(":");
+                            rooms.add(parts[1]+":"+parts[2]);
+                            JButton roomButton = new JButton(parts[1]);
+                            roomButton.addActionListener(e -> {
+                                if(isInMatchmaking) {
+                                    showMessage("You are already in matchmaking, please cancel it first.");
+                                    return;
+                                }
+                                sendCommand("JOIN:" + parts[2]);
+                            });
+                            roomListPanel.add(roomButton);
+                            roomListPanel.revalidate();
+                            roomListPanel.repaint();
+                        }else if(finalResponse.startsWith("RESPONSE:GETROOMS")){
+                            System.out.println(finalResponse);
+                            String[] parts = finalResponse.split(":");
+                            if(parts.length < 3){
+
+                                return;
+                            }
+                            rooms.clear();
+                            for(int i=2; i<parts.length; i+=2){
+                                rooms.add(parts[i]+":"+parts[i+1]);
+                            }
+                            roomListPanel.removeAll();
+
+                            for (String room : rooms) {
+                                String[] roomParts = room.split(":");
+                                JButton roomButton = new JButton(roomParts[0]);
+                                roomButton.addActionListener(e -> {
+                                    if(isInMatchmaking) {
+                                        showMessage("You are already in matchmaking, please cancel it first.");
+                                        return;
+                                    }
+                                    sendCommand("JOIN:" + roomParts[1]);
+                                });
+                                roomListPanel.add(roomButton);
+                            }
+                            roomListPanel.revalidate();
+                            roomListPanel.repaint();
+                        }
+                        else if(finalResponse.startsWith("RESPONSE:EXIT")){
                             String[] parts = finalResponse.split(":");
                             if(parts[2].equals("SUCCESS")){
                                 showMessage("Goodbye!");
                                 running = false;
                                 System.exit(0);
                             }
-                        } else if (finalResponse.startsWith("RESPONSE:LEAVE")) {
-                            String[] parts = finalResponse.split(":");
-                            if (parts[2].equals("SUCCESS")) {
-                                showMessage("Left the game.");
-                                roomId = -1;
-                                switchToPanel("lobby");
-                            } else {
-                                showMessage("Failed to leave the game.");
-                            }
-                        } else {
+                        }else {
                             messagesArea.append(finalResponse + "\n");
                         }
                     });

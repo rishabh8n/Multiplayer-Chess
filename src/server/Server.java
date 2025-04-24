@@ -14,8 +14,34 @@ public class Server {
     private final int listenPort;
     private boolean running = true;
     private List<ClientHandlerV2> clients = new ArrayList<>();
+    private final List<ClientHandlerV2> matchmakingQueue = new ArrayList<>();
     private List<Room> rooms = new ArrayList<>();
     private Connection connection;
+
+    public synchronized void addToMatchmakingQueue(ClientHandlerV2 client) {
+        matchmakingQueue.add(client);
+        if (matchmakingQueue.size() >= 2) {
+            // Match two players
+            ClientHandlerV2 player1 = matchmakingQueue.remove(0);
+            ClientHandlerV2 player2 = matchmakingQueue.remove(0);
+
+            int roomId = generateRoomId();
+            Room room = new Room("AutoMatch Room " + roomId, true, roomId);
+            room.addClient(player1);
+            room.addClient(player2);
+            rooms.add(room);
+            player1.setRoom(room);
+            player2.setRoom(room);
+            player1.sendMessage("MATCHED:" + roomId);
+            player2.sendMessage("MATCHED:" + roomId);
+
+            System.out.println("Matched players into Room ID: " + roomId);
+        }
+    }
+
+    public synchronized void removeFromMatchmakingQueue(ClientHandlerV2 client) {
+        matchmakingQueue.remove(client);
+    }
 
     public Server(final int listen_port) {
         listenPort = listen_port;
@@ -43,14 +69,23 @@ public class Server {
         rooms.add(room);
     }
 
-    public void deleteRoom(ClientHandlerV2 client, int roomId) {
+    public void deleteRoom(int roomId) {
         Room room = getRoom(roomId);
         if (room != null) {
-            room.removeClient(client);
             if (room.isEmpty()) {
                 rooms.remove(room);
             }
         }
+    }
+
+    public String getRoomList() {
+        StringBuilder roomList = new StringBuilder();
+        for (Room room : rooms) {
+            if(!room.isPrivate()) {
+                roomList.append(room.getName()).append(":").append(room.getId()).append(":");
+            }
+        }
+        return roomList.toString();
     }
 
     public void init() {

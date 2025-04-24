@@ -71,6 +71,8 @@ public class ClientHandlerV2 extends Thread {
         }
     }
 
+
+
     private void sendWelcomeMessage() {
         out.println("RESPONSE:Welcome to the Chess Server!");
     }
@@ -115,6 +117,10 @@ public class ClientHandlerV2 extends Thread {
         return false;
     }
 
+    public void setRoom(Room room) {
+        this.room = room;
+    }
+
     private void processClientData() throws IOException {
         String request;
         while ((request = in.readLine()) != null) {
@@ -123,7 +129,32 @@ public class ClientHandlerV2 extends Thread {
                 out.println("RESPONSE:EXIT:Goodbye!");
                 closeConnection();
                 break;
-            } else if(request.startsWith("CREATE:")){
+            }else if(request.startsWith("GETUSERINFO:")){
+                if(user != null){
+                    out.println("RESPONSE:GETUSERINFO:SUCCESS:"+user.getUsername()+":"+user.getGamesPlayed()+":"+user.getGamesWon());
+                } else {
+                    out.println("RESPONSE:GETUSERINFO:FAILED:User not authenticated");
+                }
+            }
+            else if(request.startsWith("MATCHMAKING:JOIN")){
+                if(room != null){
+                    out.println("RESPONSE:MATCHMAKING:FAILED:You are already in a room");
+                    continue;
+                }
+                server.addToMatchmakingQueue(this);
+                sendMessage("MATCHMAKING:WAITING");
+                } else if(request.startsWith("MATCHMAKING:LEAVE")){
+                if(room != null){
+                    room.removeClient(this);
+                    room = null;
+                }
+                server.removeFromMatchmakingQueue(this);
+                out.println("MATCHMAKING:LEFT:SUCCESS");
+            }else if(request.startsWith("GETROOMS:ALL")){
+                out.println("RESPONSE:GETROOMS:"+server.getRoomList());
+            }
+            else if(request.startsWith("CREATE:")){
+                System.out.println(request);
                 String[] parts = request.split(":");
                 if(parts.length !=3){
                     out.println("RESPONSE:CREATE:Invalid command");
@@ -136,12 +167,15 @@ public class ClientHandlerV2 extends Thread {
                     room.removeClient(this);
                 }
                 int roomId = server.generateRoomId();
-                server.createRoom(this, roomName, isPrivate==0, roomId);
+                server.createRoom(this, roomName, isPrivate==1, roomId);
                 room=server.getRoom(roomId);
                 if(room==null){
                     out.println("RESPONSE:CREATE:FAILED");
                 } else {
                     out.println("RESPONSE:CREATE:SUCCESS:" +roomName+":"+ roomId);
+                    if(!room.isPrivate()){
+                    server.broadcast("NEWROOM:"+roomName+":"+roomId,null);
+                    }
                 }
             } else if (request.startsWith("JOIN:")) {
                 String[] parts = request.split(":");
@@ -155,7 +189,11 @@ public class ClientHandlerV2 extends Thread {
                     out.println("RESPONSE:JOIN:FAILED:Room not found");
                 }else {
                     if(room!=null){
-                        room.removeClient(this);
+                        out.println("RESPONSE:JOIN:FAILED:You are already in a room");
+                    }
+                    if(targetRoom.isFull()){
+                        out.println("RESPONSE:JOIN:FAILED:Room is full");
+                        continue;
                     }
                     server.joinRoom(this, roomId);
                     room=targetRoom;
@@ -228,6 +266,7 @@ public class ClientHandlerV2 extends Thread {
             }
 
             server.removeClient(this);
+            server.removeFromMatchmakingQueue(this);
 
             if (in != null) in.close();
             if (out != null) out.close();
@@ -239,5 +278,26 @@ public class ClientHandlerV2 extends Thread {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+    public void updateGameStats(boolean gameWon) {
+        if (user != null) {
+            if(!UserController.updateGameStats(user.getId(), gameWon)){
+                System.out.println("Failed to update game stats for user: " + user.getUsername());
+            } else {
+                System.out.println("Game stats updated for user: " + user.getUsername());
+
+                user.setGamesPlayed(user.getGamesPlayed() + 1);
+                if (gameWon) {
+                    user.setGamesWon(user.getGamesWon() + 1);
+                }
+            }
+        } else {
+            System.out.println("User not authenticated, cannot update game stats.");
+        }
+        room.removeClient(this);
+        out.println("RESPONSE:GAME:ENDED");
+        out.println("RESPONSE:LEAVE:SUCCESS");
+        server.deleteRoom(room.getId());
+        room=null;
     }
 }
